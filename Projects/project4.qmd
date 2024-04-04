@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
+title: "Client Report - Denver, Colorado Homes"
 subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+author: "Vannah Pyatt"
 format:
   html:
     self-contained: true
@@ -25,4 +25,166 @@ execute:
     
 ---
 
-### Paste in a template
+```{python}
+#| label: libraries
+#| include: false
+import pandas as pd
+import plotly.express as px
+import numpy as np
+
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier 
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import VotingRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+
+from sklearn import metrics
+```
+
+
+## Elevator pitch
+
+_Using Machine Learning was really effective in identifying the homes that we build before 1980. We acheived just under a 95% accuracy in correctly predicting whether the homes were built before 1980 or not. I recommend using this method to idetify the homes with abestos in the paint to keep our residents safe._
+
+```{python}
+#| label: project-data
+#| code-summary: Read and format project data
+#| 
+denver = pd.read_csv('https://raw.githubusercontent.com/byuidatascience/data4dwellings/master/data-raw/dwellings_denver/dwellings_denver.csv')
+ml = pd.read_csv('https://raw.githubusercontent.com/byuidatascience/data4dwellings/master/data-raw/dwellings_ml/dwellings_ml.csv')
+neighbor = pd.read_csv('https://raw.githubusercontent.com/byuidatascience/data4dwellings/master/data-raw/dwellings_neighborhoods_ml/dwellings_neighborhoods_ml.csv')
+
+ml_merged_correct = pd.merge(ml, neighbor, on='parcel', how='left').drop_duplicates()
+
+```
+
+
+
+## QUESTION|TASK 1
+
+__Create 2-3 charts that evaluate potential relationships between the home variables and before1980. Explain what you learn from the charts that could help a machine learning algorithm.__
+
+_From chart 1 we learn that homes built before 1980 are more likely only have 1 story. From chart 2 we learn that homes with the Att garage type (which I believe is attached) are less likely to be build before 1980. From chart 3 we learn that homes with 6+ bedrooms are a lot more likely to definitly be built before 1980._
+
+```{python}
+#| label: Q1
+#| code-summary: charts
+
+chart1 = px.box(ml, x='stories', y='yrbuilt', title='',
+             labels={'stories': 'Number of Stories', 'yrbuilt': 'Year Built'}) 
+chart1.show()
+chart2 = px.box(denver, x='gartype', y='yrbuilt', title='',
+             labels={'gartype': 'Garage Type', 'yrbuilt': 'Year Built'})
+chart2.show()
+chart3 = px.box(ml, x='numbdrm', y='yrbuilt', title='',
+             labels={'numbdrm': 'Number of Bedrooms', 'yrbuilt': 'Year Built'})
+chart3.show()
+```
+
+
+## QUESTION|TASK 2
+
+__Build a classification model labeling houses as being built “before 1980” or “during or after 1980”. Your goal is to reach or exceed 90% accuracy. Explain your final model choice (algorithm, tuning parameters, etc) and describe what other models you tried.__
+
+_I ended up choosing the Decision Tree Classifier, but I did do a couple of others. I started with the Gaussian model. The highest accuracy I was able to acheive was 0.8 with this list of features: stories, numbaths, livearea, basement, condition_AVG, condition_Excel, quality_A, gartype_Att. I did not add the neighborhoods to this model. When I then tried the Decision Tree Classifier model I got an accuracy of 94.83%. I ended with trying the Voting Regressor Model but when calculating the accuracy I have to determine a good threshold for the predictions to be tested against. Online it said for a True/False test 0.5 is usually a good threshold number.  At 0.5 the accuracy was 95.27%. I chose the Decision Tree Classifier over the Voting Regressor Model because of functionality. It is a little more difficult to work with and the benefit was not as major._
+
+```{python}
+#| label: Q2
+#| code-summary: Decision Tree Classifier Training and Test
+
+features = ml_merged_correct.drop(columns=['before1980', "parcel", "yrbuilt"])
+targets = ml_merged_correct.before1980
+train_data, test_data, train_targets, test_targets = train_test_split(features, targets, test_size = .3, random_state= 222) 
+
+decision_tree = DecisionTreeClassifier()
+
+# TRAIN
+decision_tree = decision_tree.fit(train_data,train_targets)
+
+#TEST
+targets_predicted = decision_tree.predict(test_data)
+
+# ACCURACY
+print(" Decision Tree Accuracy:",
+      metrics.accuracy_score(test_targets, targets_predicted))
+```
+
+## QUESTION|TASK 3
+
+__Justify your classification model by discussing the most important features selected by your model. This discussion should include a chart and a description of the features.__
+
+_This plot shows the Features that the Decision Tree Classifier model chose and their importances. It is organized by most influential feature to least. Note that I am show just the most influential. There are some others that the test did use, but had less than 0.006 in feature importance so I chose not to include it in the visualization. I summed up the neighborhood feature importance to be able to compare the total impact that element had in comparison with the other features. I removed the neighborhoods with a feature importance less than 0.001 from the visual since their impact is seen better in the summed portion. Totalled up, the neighborhood features actually contribute to the accuracy of the classifier more than the next highest contributor._
+
+```{python}
+#| label: Q3
+#| code-summary: format data for plot
+
+# df with features and their importance
+feature_importance_df = pd.DataFrame({
+    'Feature': features.columns,
+    'Importance': decision_tree.feature_importances_
+})
+
+# sum neighborhood features
+nbhd_import_sum = feature_importance_df.loc[feature_importance_df['Feature'].str.startswith('nbhd_'), 'Importance'].sum()
+nbhd_sum = pd.DataFrame({'Feature': ['nbhd_sum'], 'Importance': [nbhd_import_sum]})
+feature_importance_df = pd.concat([feature_importance_df, nbhd_sum], ignore_index=True)
+
+feature_importance_df = feature_importance_df[feature_importance_df['Importance'] >= 0.001] # take out the rows where importance was 0
+
+feature_importance_df = feature_importance_df[~((feature_importance_df['Feature'].str.startswith('nbhd_')) & (feature_importance_df['Importance'] < 0.006))] # filter out neighborhood rows with importance < 0.006
+
+feature_importance_df = feature_importance_df.sort_values(by='Importance', ascending=False) #sort in decending order
+
+
+
+plot = px.bar(feature_importance_df, x='Feature', y='Importance', 
+             title='Feature Importances',
+             labels={'Importance': 'Importance Score'},
+             width=1500, height=500)\
+        .update_layout(xaxis_tickangle=-45)\
+        .update_traces(marker=dict(line=dict(width=0.2)))
+
+plot.show()
+```
+
+_The table below shows the description of the top 20._
+
+```{python}
+#| label: Q3-table
+#| code-summary: table
+#| fig-cap: "Description of the Top 20 Features"
+#| fig-align: center
+
+descriptions = pd.DataFrame({
+    'Features': ['nbhd_sum', 'arcstyle_ONE-STORY', 'gartype_Att', 'quality_C', 'nbhd_#', 'basement', 'livearea', 'stories', 'abstrprd', 'sprice', 'tasp', 'numbdrm', 'status_I', 'netprice', 'nocars'],
+    'Description': ['sum of the neighborhood features', 'homes with one story', 'attached garage', 'home quality grade C', 'neighborhood number', 'squarefeet of basement, if there is one', 'sqft of livable space', 'number of stories in home', 'no idea', 'Selling Price of home', 'tax assessed selling price', 'number of bedrooms', 'not vacant', 'net price of home', 'size of garage in cars']
+})
+
+display(descriptions)
+```
+
+
+
+
+## QUESTION|TASK 4
+
+__Describe the quality of your classification model using 2-3 different evaluation metrics. You also need to explain how to interpret each of the evaluation metrics you use.__
+
+_Precision: Precision measures the accuracy of positive predictions, which is calculated by the proportion of correctly predicted positive predictions by our classifier out of all homes predicted as positive. Our test gives a precision of 0.96. This means that 96% of the homes we predicted as being built before 1980 were correctly predicted._
+
+_Recall: Recall tells us the proportion of correctly predicted positive instances out of all actual positive instances. We have a recall of 0.95, which means that 95% of time we predicted the homes correctly as being built before1980._
+
+_Accuarcy: Accuaracy shows us the percent of correctly predicted homes. Our test has a accuracy of 94.6%. So, 94.6% of the time we will correctly predict whether a home was built before 1980 or not._
+
+```{python}
+#| label: Q4
+#| code-summary: evaluation metrics code
+
+print(metrics.classification_report(test_targets, targets_predicted))
+print(" Decision Tree Accuracy:",
+      metrics.accuracy_score(test_targets, targets_predicted))
+
+```
