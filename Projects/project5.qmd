@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
+title: "Client Report - StarWars"
 subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+author: "Vannah"
 format:
   html:
     self-contained: true
@@ -25,4 +25,200 @@ execute:
     
 ---
 
-### Paste in a template
+```{python}
+#| label: libraries
+#| include: false
+import pandas as pd
+import numpy as np
+import plotly.express as px
+```
+
+
+## Elevator pitch
+
+_I cleaned the data and put it through a Decision Tree Classifier Machine Learning Model to predict if respondents have a household income of more that 50k. After training, the accuracy of the model only got up to 58%._
+
+```{python}
+#| label: project-data
+#| code-summary: Read and format project data
+
+url = "https://raw.githubusercontent.com/fivethirtyeight/data/master/star-wars-survey/StarWars.csv"
+raw_data = pd.read_csv(url, encoding='latin1') # I had a hard time reading in the data...I wonder if there are some spanish letters in the data on accident
+
+data = pd.read_csv(url, encoding='latin1', skiprows=1)
+```
+
+## QUESTION|TASK 1
+
+__Shorten the column names and clean them up for easier use with pandas. Provide a table or list that exemplifies how you fixed the names.__
+
+_I used the column names already in the data set and then for the questions, I changed the column name to represent the question._
+
+```{python}
+#| label: Q1
+#| code-summary: column changes and table of changes
+
+data.columns = [
+ 'RespondentID',
+ 'watched_any',
+ 'fan',
+ 'watched_Episode_I',
+ 'watched_Episode_II',
+ 'watched_Episode_III',
+ 'watched_Episode_IV',
+ 'watched_Episode_V',
+ 'watched_Episode_VI',
+ 'rank_Episode_I',
+ 'rank_Episode_II',
+ 'rank_Episode_III',
+ 'rank_Episode_IV',
+ 'rank_Episode_V',
+ 'rank_Episode_VI',
+ 'character_opinion_Han_Solo',
+ 'character_opinion_Luke_Skywalker',
+ 'character_opinion_Princess_Leia_Organa',
+ 'character_opinion_Anakin_Skywalker',
+ 'character_opinion_Obi_Wan_Kenobi',
+ 'character_opinion_Emperor_Palpatine',
+ 'character_opinion_Darth_Vader',
+ 'character_opinion_Lando_Calrissian',
+ 'character_opinion_Boba_Fett',
+ 'character_opinion_C-3P0',
+ 'character_opinion_R2_D2',
+ 'character_opinion_Jar_Jar_Binks',
+ 'character_opinion_Padme_Amidala',
+ 'character_opinion_Yoda',
+ 'character_shot_first',
+ 'expanded_universe',
+ 'expanded_universe_fan',
+ 'star_trek_fan',
+ 'Gender',
+ 'Age',
+ 'Household Income',
+ 'Education',
+ 'Location (Census Region)']
+
+name_changes = pd.DataFrame({'Questions': raw_data.columns.tolist(), 'Specifics': raw_data.iloc[0].tolist(), 'Final Column Names': data.columns.tolist()})
+name_changes
+
+```
+
+
+
+## QUESTION|TASK 2
+
+__Clean and format the data so that it can be used in a machine learning model. As you format the data, you should complete each item listed below. In your final report provide example(s) of the reformatted data with a short description of the changes made.__
+
+_This code just filters and cleans the data set to get it ready for the machine learning algorithm. I filtered for respondents who have seen at least one film; removed rows where all info after that column was lost; changed the age, education, and income columns to be numerical representations of the information; created a column called income_more_than_50k that is used as the target column in the machine learning section; changed all yes/no inputs to binary; changed the categorical character_opinion variables to be numerical; changed the watched columns to not have the name of the movie in the row, but instead a binary number indicating Yes or No. I one hot encoded the gender column to remove one of the reulting columns since it gives repetitive info. Lastly, I one hot encoded the remaining categorical columns._
+
+```{python}
+#| label: Q2
+#| code-summary: Read and format data
+
+#a. Filter the dataset to respondents that have seen at least one film.
+data = data[data['watched_any'] == "Yes"]
+data = data.dropna(subset=['fan']) #also removing all rows where the "fan" col is NAN since I found that in those cases all the answers are also Nan
+#b. Create a new column that converts the age ranges to a single number. Drop the age range categorical column.
+data['age'] = np.where(data['Age'] == "18-29", 23, np.where(data['Age'] == "30-44", 37, np.where(data['Age'] == "45-60", 53, np.where(data['Age'] == ">60", 65, np.nan))))
+del data['Age']
+#c. Create a new column that converts the education groupings to a single number. Drop the school categorical column
+data['education'] = np.where(data['Education'] == 'High school degree', 12, np.where(data['Education'] == "Less than high school degree", 8, np.where(data['Education'] == "Some college or Associate degree", 14, np.where(data['Education'] == "Bachelor degree", 16, np.where(data['Education'] == "Graduate degree", 18, np.nan)))))
+del data['Education']
+#d. Create a new column that converts the income ranges to a single number. Drop the income range categorical column.
+data['income'] = np.where(data['Household Income'] == '$0 - $24,999', 25, np.where(data['Household Income'] == "$25,000 - $49,999", 50, np.where(data['Household Income'] == "$50,000 - $99,999", 100, np.where(data['Household Income'] == "$100,000 - $149,999", 150, np.where(data['Household Income'] == "$150,000+", 200, np.nan)))))
+del data['Household Income']
+#e. Create your target (also known as “y” or “label”) column based on the new income range column. 
+data['income_more_than_50k'] = np.where(data['income'] > 50, 1, np.where(data['income'] == np.nan, np.nan, 0))
+
+#my own df changes  
+            #Change all yes and no to binary
+data.replace("Yes", 1, inplace=True)
+data.replace("No", 0, inplace=True)
+            #Change all ranking to -2 to 2
+data.replace("Very favorably", 2, inplace=True)
+data.replace("Somewhat favorably", 1, inplace=True)
+data.replace("Neither favorably nor unfavorably (neutral)", 0, inplace=True)
+data.replace("Somewhat unfavorably", -1, inplace=True)
+data.replace("Very unfavorably", -2, inplace=True)
+data.replace("Unfamiliar (N/A)", -999, inplace=True)
+            #Change all watched_episode_ to binary
+data['watched_Episode_I'] = np.where(data['watched_Episode_I'] == 'Star Wars: Episode I - The Phantom Menace', 1, 0)
+data['watched_Episode_II'] = np.where(data['watched_Episode_II'] == 'Star Wars: Episode II  Attack of the Clones', 1, 0)
+data['watched_Episode_III'] = np.where(data['watched_Episode_III'] == 'Star Wars: Episode III  Revenge of the Sith', 1, 0)
+data['watched_Episode_IV'] = np.where(data['watched_Episode_IV'] == 'Star Wars: Episode IV  A New Hope', 1, 0)
+data['watched_Episode_V'] = np.where(data['watched_Episode_V'] == 'Star Wars: Episode V The Empire Strikes Back', 1, 0)
+data['watched_Episode_VI'] = np.where(data['watched_Episode_VI'] == 'Star Wars: Episode VI Return of the Jedi', 1, 0)
+
+#f. One-hot encode all remaining categorical columns.
+data_encoded = pd.get_dummies(data, columns= ["Gender"], drop_first=True)
+data_encoded = pd.get_dummies(data_encoded)
+data_encoded.head(5)
+```
+
+
+## QUESTION|TASK 3
+
+__Validate that the data provided on GitHub lines up with the article by recreating 2 of the visuals from the article.__
+
+_I decided to remake the who shot first summary graph. I summarized the data to calculate the percentages, not including the entries with missing data. I also had to make the character column categorical so that I could put the data in the correct order._
+
+```{python}
+#| label: Q3
+#| code-summary: Read and format data
+
+# creating df with data
+counts = data['character_shot_first'].value_counts()
+total_options = len(data['character_shot_first'].dropna())
+percentages = round((counts / total_options) * 100, 0)
+
+data_shot_first = pd.DataFrame({'Character': counts.index,
+                           'Count': counts.values,
+                           'Percentage': percentages.values})
+
+# make column categorical so we can plot in the right order (like factor in R and seting the order of factor values)
+data_shot_first['Character'] = pd.Categorical(data_shot_first['Character'], categories= ["I don't understand this question", 'Greedo', "Han"], ordered=True)
+data_shot_first = data_shot_first.sort_values(by='Character')
+
+# plot code
+plot = px.bar(data_shot_first, x='Percentage', y='Character', orientation='h', text='Percentage',
+             title="Who shot first? <br> according to 834 respondents",
+             labels={'Percentage': '', 'Character': ''})
+plot.update_xaxes(showticklabels=False, showgrid=False)
+plot.update_yaxes(showgrid=False)
+
+plot
+```
+
+
+
+
+## QUESTION|TASK 4
+
+__Build a machine learning model that predicts whether a person makes more than $50k. Describe your model and report the accuracy.__
+
+_I used the Decision Tree Classifier for my machine learning model. I was unfortunately unable to get above 58% accuracy. That could mean star wars fan status, knowlege, and opinions, are not good predictors of income._
+
+```{python}
+#| label: Q4
+#| code-summary: Read and format data
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier 
+
+from sklearn import metrics
+
+features = data_encoded.drop(columns=['income_more_than_50k', "income"])
+targets = data_encoded.income_more_than_50k
+train_data, test_data, train_targets, test_targets = train_test_split(features, targets, test_size = 0.4, random_state= 4) 
+
+decision_tree = DecisionTreeClassifier()
+
+# TRAIN
+decision_tree = decision_tree.fit(train_data,train_targets)
+
+#TEST
+targets_predicted = decision_tree.predict(test_data)
+
+# ACCURACY
+print(" Decision Tree Accuracy: ",\
+      metrics.accuracy_score(test_targets, targets_predicted))
+```
