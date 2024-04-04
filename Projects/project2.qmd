@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
+title: "Client Report - Baseball"
 subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+author: "Vannah Pyatt"
 format:
   html:
     self-contained: true
@@ -25,4 +25,150 @@ execute:
     
 ---
 
-### Paste in a template
+```{python}
+#| label: libraries
+#| include: false
+import pandas as pd
+import sqlite3
+import plotly.express as px
+```
+
+
+## Elevator pitch
+
+_We are going to be looking into the Baseball players that come from BYU-I, batting averages of players and then compare players from The Yankees and Red Sox. Two baseball players attended BYU-Idaho and we looked at some of their stats. As you can see at the bottom, there is a chart showing the batting averages for the Red Sox vs. Yankees. The Batting averages are really similar throughout the years._
+
+```{python}
+#| label: project-data
+#| code-summary: Read and format project data
+baseball_data = sqlite3.connect('lahmansbaseballdb.sqlite')
+
+```
+
+
+## QUESTION|TASK 1
+
+__Write an SQL query to create a new dataframe about baseball players who attended BYU-Idaho. The new table should contain five columns: playerID, schoolID, salary, and the yearID/teamID associated with each salary. Order the table by salary (highest to lowest) and print out the table in your report.__
+
+
+```{python}
+#| label: Q1
+#| code-summary: SQL query and formating table
+#| fig-align: center
+
+byui_players = pd.read_sql_query('''
+    SELECT col.playerid, col.schoolID AS School, sal.salary AS Salary, sal.yearID AS Year, sal.teamID AS Team
+    FROM CollegePlaying AS col
+    INNER JOIN Salaries AS sal
+    ON col.playerid = sal.playerID
+    WHERE schoolID LIKE '%BYUI%'
+    ORDER BY salary DESC
+    ''', baseball_data)
+byui_players['Salary'] = byui_players['Salary'].apply(lambda x: "${:,.0f}".format((x)))
+byui_players
+
+```
+
+_There are two baseball players who attended BYU-Idaho. They played for a variety of teams with salaries ranging from $150,000 to $4,000,00._
+
+
+
+## Batting Averages | QUESTION 2
+###### This three-part question requires you to calculate batting average (number of hits(H) divided by the number of at-bats(AB))
+
+
+###### PART A. Write an SQL query that provides playerID, yearID, and batting average for players with at least 1 at bat that year. Sort the table from highest batting average to lowest, and then by playerid alphabetically. Show the top 5 results in your report.
+
+_The top three potentially only had a couple at-bats, which is why their batting average is 1.0._
+
+```{python}
+#| label: GQ2 PART A
+part_a = pd.read_sql_query('''
+    SELECT playerID, yearID AS Year, (H+0.0)/AB AS batavg
+    FROM batting
+    WHERE AB >= 1
+    ORDER BY batavg DESC, playerID
+    LIMIT 5
+    ''', baseball_data)
+part_a
+```
+
+###### PART B. Use the same query as above, but only include players with at least 10 at bats that year. Print the top 5 results.
+
+```{python}
+#| label: GQ2 PART B
+part_b = pd.read_sql_query('''
+    SELECT playerID, yearID AS Year, (H+0.0)/AB AS batavg
+    FROM batting
+    WHERE AB >= 10
+    ORDER BY batavg DESC, playerID
+    LIMIT 5
+    ''', baseball_data)
+part_b
+```
+
+###### PART C. Now calculate the batting average for players over their entire careers (all years combined). Only include players with at least 100 at bats, and print the top 5 results.
+
+_The highest batting average over the career of the players in this database is 0.403._
+
+```{python}
+#| label: GQ2 PART C
+part_c = pd.read_sql_query('''
+    SELECT playerID, SUM(H+0.0)/SUM(AB) AS careerbatavg
+    FROM batting
+    WHERE AB >= 100
+    GROUP BY playerID
+    ORDER BY careerbatavg DESC, playerID
+    LIMIT 5
+    ''', baseball_data)
+part_c
+```
+
+
+## Yankees and Red Sox Batting Averages
+
+###### Pick any two baseball teams and compare them using a metric of your choice (average salary, home runs, number of wins, etc). Write an SQL query to get the data you need, then make a graph in Altair to visualize the comparison. What do you learn? I will be comparing Yankees and Red Sox by batting averages over the years.
+
+_The Yankee and Red Sox batting averages over the team have fluctuated only mildly. The peak around 1930 is interesting as well as the drop from 1965 to 1970 in batting averages. This would be an area for further investigation if I really liked baseball. But I do not care for baseball._
+
+```{python}
+#| label: GQ3
+yankees = pd.read_sql_query('''
+    SELECT yearID as Year, SUM(H+0.0)/SUM(AB) AS teambatavg
+    FROM Teams
+    WHERE name LIKE '%yankee%'
+    GROUP BY Year
+    ORDER BY Year
+    ''', baseball_data)
+redsox = pd.read_sql_query('''
+    SELECT yearID as Year, SUM(H+0.0)/SUM(AB) AS teambatavg
+    FROM Teams
+    WHERE name LIKE '%red sox%'
+    GROUP BY Year
+    ORDER BY Year
+    ''', baseball_data)
+yankees = yankees.rename(columns = {'teambatavg':'New York Yankees'})
+redsox = redsox.rename(columns = {'teambatavg':'Boston Red Sox'})
+combined = pd.merge(yankees, redsox, how='inner', on='Year') #inner gets rid of all years that there are no stats on either team
+combined
+```
+
+```{python}
+#| label: GQ3 chart
+#| fig-cap: "BATTING AVERAGES: RED SOX VS YANKEES"
+#| fig-align: center
+both = pd.read_sql_query('''
+    SELECT yearID AS Year, name, SUM(H+0.0)/SUM(AB) AS teambatavg
+    FROM Teams
+    WHERE (name LIKE '%yankee%' OR name LIKE '%red sox%')
+    GROUP BY name, Year
+    ORDER BY Year
+    ''', baseball_data)
+fig = px.line(both, x = 'Year', y = 'teambatavg', color = 'name', 
+              title = 'Batting Averages of Yankees and Red Sox',
+              labels = {'yearID': 'Year', 'teambatavg': 'Team Batting Average'}
+              ).update_layout(width=800, template='plotly_white')
+
+
+fig
+```
