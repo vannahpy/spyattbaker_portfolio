@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
-subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+title: "What's in a Name?"
+subtitle: "DS 250 - Project 1"
+author: "Vannah Pyatt"
 format:
   html:
     self-contained: true
@@ -20,9 +20,157 @@ format:
         source: false
         toggle: true
         caption: See code
-execute: 
-  warning: false
     
 ---
 
-### Paste in a template
+```{python}
+#| label: libraries
+#| include: false
+import pandas as pd
+import altair as alt
+import numpy as np
+
+from IPython.display import Markdown
+from IPython.display import display
+from tabulate import tabulate
+```
+
+
+## Elevator pitch
+
+I used graphics in order to find answers on the given questions. I attempted to keep the information relevant and helpful to see the change in name usage over time and how world events, such as a movie release, influence the number of children given particular names at that time.
+
+```{python}
+names = pd.read_csv('https://raw.githubusercontent.com/byuidatascience/data4names/master/data-raw/names_year/names_year.csv')
+```
+
+
+## GRAND QUESTION 1
+
+#### How does your name at your birth year compare to its use historically?
+
+
+
+```{python}
+#| label: GQ1
+#| code-summary: pull out all the rows named Savannah and all the columns year and Total. savannah_relevent is the data on the name Savannah that contains more useful information.
+savannah = names[names.name =='Savannah'][['year', 'Total']] 
+birth_point = savannah.query('year == 1999')
+savannah_relevant = savannah[savannah.year >= 1975]
+
+#print(savannah_relevant
+#  .head(10)
+#  .filter(['year', 'Total'])
+#  .to_markdown(index=False))
+
+```
+
+
+There was a spike in the use of my name beginning in the 1990's. The point on the graph indicates the year that I was born, 1999, which was in the peak of the use of the name Savannah. After some research, I found that the movie, Savannah Smiles came out in 1992, which likely had an influence on the number of children named Savannah. Overall, the highest number of children named Savannah in one year was only a little over 7,000 so the name is still not super common.
+
+Note that I felt like the name Savannah was not used almost at all in the early 1900s so that part of the data is not included in the graph summary.
+
+```{python}
+#| label: GQ1 chart
+#| code-summary: Savannah Name plot 
+#| fig-align: center
+
+savannah_plot = alt.Chart(savannah_relevant).mark_line(color = 'darkorange').encode(x =alt.X ('year',scale=alt.Scale(domain=(1975, 2015)), axis = alt.Axis(format = 'd', title = 'Year')), y = alt.Y('Total', axis = alt.Axis(title = 'Frequency'))).properties(title='Popularity of the name Savannah')
+point = alt.Chart(birth_point).mark_point(color = 'purple').encode(x ='year', y = 'Total')
+savannah_plot + point
+```
+
+
+
+## GRAND QUESTION 2
+
+#### If you talked to someone named Brittany on the phone, what is your guess of his or her age? What ages would you not guess?
+
+```{python}
+#| label: GQ2
+#| code-summary: making a subset of the data and adding the current age column to the data
+brittany = names[names.name =='Brittany'][['year', 'Total']]
+current_year = 2022
+ages = []
+for i in brittany['year']:
+    age_calc = current_year - i
+    ages.append(age_calc)
+brittany['Current Age'] = ages
+```
+
+Based on the Graph we can see that the people who are named Brittany have an average age range of 25 years to 35 years of age. I would guess that Brittany is 32 years old. I would not guess younger than 20 or older than 40 years of age.
+
+```{python}
+#| label: GQ2 chart
+#| code-summary: Named Brittany Plot
+#| fig-align: center
+
+brittany_plot = alt.Chart(brittany).mark_bar(color = 'salmon').encode(x =alt.X('Current Age',scale=alt.Scale(domain=(3, 55))), y = 'Total').properties(title='Current Age of Persons Named Brittany')
+brittany_plot
+```
+
+
+
+## GRAND QUESTION 3
+
+#### Mary, Martha, Peter, and Paul are all Christian names. From 1920 - 2000, compare the name usage of each of the four names. What trends do you notice?
+
+
+
+```{python}
+#| label: GQ3
+#| code-summary: Making a subset of the data that includes all the Christian names we are concerned with. We will use this data set for the graph. I also made a chart to see the data in a more visually pleasant way.
+christian_names = names.query('name in ["Mary","Martha","Paul","Peter"]')[['name','year','Total']]
+#made a pretty chart here to see the data
+#mary = names[names.name =='Mary'][['year', 'Total']].rename(columns = {'Total':'Mary'}).reset_index().drop(columns = ['index'])
+#martha = names[names.name =='Martha'][['Total']].rename(columns = {'Total':'Martha'}).reset_index().drop(columns = ['index'])
+#paul = names[names.name =='Paul'][['Total']].rename(columns = {'Total':'Paul'}).reset_index().drop(columns = ['index'])
+#peter = names[names.name =='Peter'][['Total']].rename(columns = {'Total':'Peter'}).reset_index().drop(columns = ['index'])
+#christ_name_pretty = pd.concat([mary, martha, paul, peter], axis=1)
+#print(christ_name_pretty.head(10).filter(['year', 'Mary', 'Martha', 'Paul', 'Peter']).to_markdown(index=False))c
+```
+
+There has been a clear decrease in the amount of people named these four Christian names. The most clear decrease is in the name Mary.
+
+```{python}
+#| label: GQ3 chart
+#| code-summary: Christian names plot
+#| fig-align: center
+christian_plot = alt.Chart(christian_names).encode(
+    x =alt.X ('year', axis = alt.Axis(format = 'd', title = 'Year')), y = alt.Y('Total'), color = 'name').mark_line().properties(width = 500, title='Popularity of Christian Names')
+
+christian_plot
+```
+
+
+
+## GRAND QUESTION 4
+
+#### Think of a unique name from a famous movie. Plot the usage of that name and see how changes line up with the movie release. Does it look like the movie had an effect on usage?
+
+
+```{python}
+#| label: GQ4
+#| code-summary: subset of the names data with only the name Ariel. I also reduced this data because the information before the year 1955 doesn't tell us much.
+movie_ariel = names[names.name =='Ariel'][['year', 'Total']][names.year >= 1955]
+```
+
+The movie release for Ariel has clearly had an effect on the number of children named Ariel. The blue bar indicates the year Ariel was released. The data before the year 1955 was not used in this graph because the name was used very little back then and the inclusion would reduce the ability to see the important data clearly.
+
+There was about a 28% increase in name usage of the name Ariel from the release year to 1991, two years after.
+
+```{python}
+#| label: GQ4 chart
+#| code-summary: Movie Ariel Plot
+#| fig-align: center
+movie_ariel_plot = alt.Chart(movie_ariel).encode(
+    x =alt.X ('year', axis = alt.Axis(format = 'd', title = 'Year')), 
+    y = alt.Y('Total')
+    ).mark_bar(color = 'darkred', size = 4).properties(width = 500, title='Popularity of the Name Ariel')
+movie_release_date = movie_ariel.query('year == 1989')
+release_dot = alt.Chart(movie_release_date).mark_bar(color = 'darkblue').encode(
+    x = 'year', 
+    y = 'Total')
+
+movie_ariel_plot + release_dot
+```
