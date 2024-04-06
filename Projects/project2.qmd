@@ -1,6 +1,6 @@
 ---
-title: "Client Report - Baseball"
-subtitle: "Course DS 250"
+title: Airport Delays"
+subtitle: "DS 250 - Project 2"
 author: "Vannah Pyatt"
 format:
   html:
@@ -29,146 +29,192 @@ execute:
 #| label: libraries
 #| include: false
 import pandas as pd
-import sqlite3
 import plotly.express as px
+import numpy as np
+import calendar
 ```
 
 
 ## Elevator pitch
 
-_We are going to be looking into the Baseball players that come from BYU-I, batting averages of players and then compare players from The Yankees and Red Sox. Two baseball players attended BYU-Idaho and we looked at some of their stats. As you can see at the bottom, there is a chart showing the batting averages for the Red Sox vs. Yankees. The Batting averages are really similar throughout the years._
+_We cleaned up the data and ran some code to find which airport is the worst to fly out of. We found that overall, SFO is the worst airport for delays. In the last graph you will see that they do have the worst weather delays so it's possible they have processes that are efficient, but the area is unlucky with weather._
 
 ```{python}
 #| label: project-data
 #| code-summary: Read and format project data
-baseball_data = sqlite3.connect('lahmansbaseballdb.sqlite')
+
+flights = pd.read_json('https://raw.githubusercontent.com/byuidatascience/data4missing/master/data-raw/flights_missing/flights_missing.json')
 
 ```
 
+__Highlight the Questions and Tasks__
 
 ## QUESTION|TASK 1
 
-__Write an SQL query to create a new dataframe about baseball players who attended BYU-Idaho. The new table should contain five columns: playerID, schoolID, salary, and the yearID/teamID associated with each salary. Order the table by salary (highest to lowest) and print out the table in your report.__
+__Fix all of the varied missing data types in the data to be consistent (all missing values should be displayed as “NaN”). In your report include one record example (one row) from your new data, in the raw JSON format. Your example should display the “NaN” for at least one missing value.__
 
 
 ```{python}
 #| label: Q1
-#| code-summary: SQL query and formating table
+#| code-summary: format data
+
+flights = (flights
+        .replace(-999, np.nan)
+        .replace('n/a', np.nan)
+        .replace('1500+', 1500)
+        .replace('Febuary', 'February')
+        .assign(num_of_delays_carrier = lambda x: x.num_of_delays_carrier.astype(int))
+        )
+
+print(flights.iloc[921])        
+```
+
+_I replaced the -999 and n/a values with NA. and replaced 1500+ with just 1500, as well as fixing any mispellings of Feb and making sure the num of delays is numerical._
+
+
+## QUESTION|TASK 2
+
+__Which airport has the worst delays? Discuss the metric you chose, and why you chose it to determine the “worst” airport. Your answer should include a summary table that lists (for each airport) the total number of flights, total number of delayed flights, proportion of delayed flights, and average delay time in hours.__
+
+_SFO is the airport with the worst delays. I found the proportion of flights delayed for each airport and the average time flights are delayed for each airport._
+
+```{python}
+#| label: Q2
+#| code-summary: Summarize data
+by_port = (flights.groupby('airport_code')
+        .agg(sum_flights_total = ('num_of_flights_total', np.sum),
+                sum_delays_total = ('num_of_delays_total', np.sum),
+                total_delay_time = ('minutes_delayed_total', np.sum))
+        .assign(delay_proportion = lambda x: x.sum_delays_total/x.          
+                sum_flights_total, 
+                average_delay_time_hrs = lambda x: x.total_delay_time/(60*x.sum_flights_total)
+                ).reset_index())
+```
+
+_SFO has the highest percentage of flights delayed AND the highest average delay time, making it obviously the worst airport to go to if you are trying to avoid airport delays._
+
+```{python}
+#| label: Q2-chart
+#| code-summary: plot
 #| fig-align: center
 
-byui_players = pd.read_sql_query('''
-    SELECT col.playerid, col.schoolID AS School, sal.salary AS Salary, sal.yearID AS Year, sal.teamID AS Team
-    FROM CollegePlaying AS col
-    INNER JOIN Salaries AS sal
-    ON col.playerid = sal.playerID
-    WHERE schoolID LIKE '%BYUI%'
-    ORDER BY salary DESC
-    ''', baseball_data)
-byui_players['Salary'] = byui_players['Salary'].apply(lambda x: "${:,.0f}".format((x)))
-byui_players
+graph_by_port = px.line(by_port, 
+                        x="airport_code", 
+                        y=["delay_proportion", 'average_delay_time_hrs'],
+                        title="Proportion of Flights Delayed and Average Delay Time by Airport",
+                        labels={"airport_code": "Airport",
+                                "value": "Delay variables"}
+                        )
+
+graph_by_port.show()
 
 ```
 
-_There are two baseball players who attended BYU-Idaho. They played for a variety of teams with salaries ranging from $150,000 to $4,000,00._
 
 
+## QUESTION|TASK 3
 
-## Batting Averages | QUESTION 2
-###### This three-part question requires you to calculate batting average (number of hits(H) divided by the number of at-bats(AB))
+__What is the best month to fly if you want to avoid delays of any length? Discuss the metric you chose and why you chose it to calculate your answer. Include one chart to help support your answer, with the x-axis ordered by month. (To answer this question, you will need to remove any rows that are missing the Month variable.)__
 
-
-###### PART A. Write an SQL query that provides playerID, yearID, and batting average for players with at least 1 at bat that year. Sort the table from highest batting average to lowest, and then by playerid alphabetically. Show the top 5 results in your report.
-
-_The top three potentially only had a couple at-bats, which is why their batting average is 1.0._
 
 ```{python}
-#| label: GQ2 PART A
-part_a = pd.read_sql_query('''
-    SELECT playerID, yearID AS Year, (H+0.0)/AB AS batavg
-    FROM batting
-    WHERE AB >= 1
-    ORDER BY batavg DESC, playerID
-    LIMIT 5
-    ''', baseball_data)
-part_a
+#| label: Q3
+#| code-summary: format data
+
+monthorder= calendar.month_name[1:]
+month_delays = (flights.groupby('month')
+        .agg(num_flights = ('num_of_flights_total', np.sum),
+                num_delays = ('num_of_delays_total', np.sum))
+        .assign(prop_flights_delayed = lambda x: x.num_delays/x.num_flights)
+        .sort_values('month', key = lambda x : 
+                pd.Categorical(x, categories=monthorder, ordered=True))
+        .reset_index()
+        )
+
 ```
 
-###### PART B. Use the same query as above, but only include players with at least 10 at bats that year. Print the top 5 results.
+_Given that we were avoiding any length of delays, I decided that the legth og delay was not important. I found the proportion of delays for each month and found that September has the lowest percetage of delays at 16.5%._
 
 ```{python}
-#| label: GQ2 PART B
-part_b = pd.read_sql_query('''
-    SELECT playerID, yearID AS Year, (H+0.0)/AB AS batavg
-    FROM batting
-    WHERE AB >= 10
-    ORDER BY batavg DESC, playerID
-    LIMIT 5
-    ''', baseball_data)
-part_b
-```
-
-###### PART C. Now calculate the batting average for players over their entire careers (all years combined). Only include players with at least 100 at bats, and print the top 5 results.
-
-_The highest batting average over the career of the players in this database is 0.403._
-
-```{python}
-#| label: GQ2 PART C
-part_c = pd.read_sql_query('''
-    SELECT playerID, SUM(H+0.0)/SUM(AB) AS careerbatavg
-    FROM batting
-    WHERE AB >= 100
-    GROUP BY playerID
-    ORDER BY careerbatavg DESC, playerID
-    LIMIT 5
-    ''', baseball_data)
-part_c
-```
-
-
-## Yankees and Red Sox Batting Averages
-
-###### Pick any two baseball teams and compare them using a metric of your choice (average salary, home runs, number of wins, etc). Write an SQL query to get the data you need, then make a graph in Altair to visualize the comparison. What do you learn? I will be comparing Yankees and Red Sox by batting averages over the years.
-
-_The Yankee and Red Sox batting averages over the team have fluctuated only mildly. The peak around 1930 is interesting as well as the drop from 1965 to 1970 in batting averages. This would be an area for further investigation if I really liked baseball. But I do not care for baseball._
-
-```{python}
-#| label: GQ3
-yankees = pd.read_sql_query('''
-    SELECT yearID as Year, SUM(H+0.0)/SUM(AB) AS teambatavg
-    FROM Teams
-    WHERE name LIKE '%yankee%'
-    GROUP BY Year
-    ORDER BY Year
-    ''', baseball_data)
-redsox = pd.read_sql_query('''
-    SELECT yearID as Year, SUM(H+0.0)/SUM(AB) AS teambatavg
-    FROM Teams
-    WHERE name LIKE '%red sox%'
-    GROUP BY Year
-    ORDER BY Year
-    ''', baseball_data)
-yankees = yankees.rename(columns = {'teambatavg':'New York Yankees'})
-redsox = redsox.rename(columns = {'teambatavg':'Boston Red Sox'})
-combined = pd.merge(yankees, redsox, how='inner', on='Year') #inner gets rid of all years that there are no stats on either team
-combined
-```
-
-```{python}
-#| label: GQ3 chart
-#| fig-cap: "BATTING AVERAGES: RED SOX VS YANKEES"
+#| label: Q3-chart
+#| code-summary: plot of month
 #| fig-align: center
-both = pd.read_sql_query('''
-    SELECT yearID AS Year, name, SUM(H+0.0)/SUM(AB) AS teambatavg
-    FROM Teams
-    WHERE (name LIKE '%yankee%' OR name LIKE '%red sox%')
-    GROUP BY name, Year
-    ORDER BY Year
-    ''', baseball_data)
-fig = px.line(both, x = 'Year', y = 'teambatavg', color = 'name', 
-              title = 'Batting Averages of Yankees and Red Sox',
-              labels = {'yearID': 'Year', 'teambatavg': 'Team Batting Average'}
-              ).update_layout(width=800, template='plotly_white')
-
-
-fig
+graph_month_delays = px.bar(month_delays, 
+             x='month', 
+             y='prop_flights_delayed',
+             color_discrete_sequence = ['darkgreen'], 
+             title='Proportion of Flights Delayed by Month',
+             labels={'month': 'Month', 'prop_flights_delayed': 'Proportion of Fights Delayed'})
+graph_month_delays
 ```
+
+
+## QUESTION|TASK 4
+
+__According to the BTS website, the “Weather” category only accounts for severe weather delays. Mild weather delays are not counted in the “Weather” category, but are actually included in both the “NAS” and “Late-Arriving Aircraft” categories. Your job is to create a new column that calculates the total number of flights delayed by weather (both severe and mild). You will need to replace all the missing values in the Late Aircraft variable with the mean. Show your work by printing the first 5 rows of data in a table.__
+
+
+```{python}
+#| label: Q4 data
+#| code-summary: format weather data
+
+# find the mean and replace all missing values
+mean_late_aircraft = flights['num_of_delays_late_aircraft'].mean()
+flightsweather = flights.replace({'num_of_delays_late_aircraft': np.nan}, mean_late_aircraft)
+
+#b.
+flightsweather = flightsweather.assign(weather_late_aircraft = lambda x: x.num_of_delays_late_aircraft *0.30)
+
+#c. 
+apr_aug= calendar.month_name[4:9]
+flightsweather = (flightsweather.assign(weather_nas = np.where(
+        flightsweather.month.isin(apr_aug), 
+            flightsweather.num_of_delays_nas*0.4,
+            flightsweather.num_of_delays_nas*0.65)))
+
+# combine all the data into one column
+flightsweather = flightsweather.assign(total_num_weather_delays = lambda x: 
+                         x.num_of_delays_weather + x.weather_late_aircraft + x.weather_nas).round({'total_num_weather_delays':2})
+
+#show the changes
+flightsweather[['airport_code','airport_name','month','year','num_of_flights_total','num_of_delays_total','total_num_weather_delays']].head(5)
+```
+
+
+## QUESTION|TASK 5
+
+__Using the new weather variable calculated above, create a barplot showing the proportion of all flights that are delayed by weather at each airport. Discuss what you learn from this graph.__
+
+
+```{python}
+#| label: Q5 data
+#| code-summary: format the data
+weather_delays_by_airport = (flightsweather.groupby('airport_code')
+        .agg(sum_flights_total = ('num_of_flights_total', np.sum),
+                sum_delays_weather = ('total_num_weather_delays', np.sum))
+        .assign(delay_proportion = lambda x: x.sum_delays_weather/x.          
+                sum_flights_total)).reset_index()
+```
+
+
+_SFO has the worst weather delays with ORD following in second and ATL in 3rd. This could be one reason why SFO has the worst delays. Not because of the organization of the airport but because of bad weather in the area._
+
+```{python}
+#| label: Q5-chart
+#| code-summary: plot of weather delays
+#| fig-align: center
+plot_weather_delays_by_airport = px.bar(weather_delays_by_airport,
+                                        x='airport_code',
+                                        y='delay_proportion',
+                                        title='Proportion of Delays Due to Weather by Airport',
+                                        labels={'airport_code': 'Airport', 'delay_proportion': 'Proportion of Delays Due to Weather'}
+                                        )
+
+plot_weather_delays_by_airport.show()
+```
+
+
+
+
+
+
